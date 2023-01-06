@@ -76,7 +76,7 @@ public class TransfereService
         agent.setPlafond(agent.getPlafond() - transfereRequest.getMontant());
         restTemplate.postForObject("http://agent-service/api/agent/"+agent.getCin(), agent.getPlafond(), null);
 
-        // Envoi SMS au client donneur avec la reference de la transaction et le code pin using Twilio ou Vonage API
+        //todo : Envoi SMS au client donneur avec la reference de la transaction et le code pin using Twilio ou Vonage API
 
         transfereRepository.save(transfere);
         AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
@@ -91,17 +91,47 @@ public class TransfereService
         }
     }
 
-    public TransfereResponse payerTransfere(String reference, String cin, String receiverType, String pinTransfere)
+    public void payerTransfere(String reference, String cin)
     {
         Transfere transfere = transfereRepository.findTransfereByReference(reference).get();
 
         if(transfere == null)
             throw new IllegalStateException("Tranfere introuvable!");
 
-        if(receiverType.equalsIgnoreCase("gab") && pinTransfere != transfere.getCodePinTransfere())
-            throw new IllegalStateException("erreur pin transfert");
-
         if(transfere.getDateExpiration().after(new Date()) && cin.equalsIgnoreCase(transfere.getReferenceClientBeneficiaire()) && transfere.getStatus() == StatusTransfere.A_SERVIR)
+        {
+            transfere.setStatus(StatusTransfere.PAYE);
+            transfereRepository.save(transfere);
+
+            //Update salesforce
+            AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
+            salesforceApiConnect.updateTransfere(authenticationResponse.getAccess_token(), authenticationResponse.getInstance_url(),transfere);
+        }
+
+        if(!transfere.getDateExpiration().after(new Date()))
+            throw new IllegalStateException("Transfere expiré");
+
+        if(!cin.equalsIgnoreCase(transfere.getReferenceClientBeneficiaire()))
+            throw new IllegalStateException("Cin fourni invalide");
+
+        if(transfere.getStatus() == StatusTransfere.PAYE)
+            throw new IllegalStateException("Transfere déjà payé");
+
+        if(transfere.getStatus() == StatusTransfere.BLOQUE)
+            throw new IllegalStateException("Transfere bloqué");
+
+        if(transfere.getStatus() == StatusTransfere.EXTOURNE)
+            throw new IllegalStateException("Transfere extourné");
+    }
+
+    public TransfereResponse payerTransfereGab(String reference, String pinTransfere)
+    {
+        Transfere transfere = transfereRepository.findTransfereByReference(reference).get();
+
+        if(pinTransfere != transfere.getCodePinTransfere())
+            throw new IllegalStateException("Pin incorrect");
+
+        if(transfere.getDateExpiration().after(new Date()) && transfere.getStatus() == StatusTransfere.A_SERVIR && pinTransfere == transfere.getCodePinTransfere())
         {
             transfere.setStatus(StatusTransfere.PAYE);
             transfereRepository.save(transfere);
@@ -112,7 +142,6 @@ public class TransfereService
             transfereResponse.setClientBeneficiare(clientBeneficiaire.getNom() + " " + clientBeneficiaire.getPrenom());
 
             //Update salesforce
-
             AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
             salesforceApiConnect.updateTransfere(authenticationResponse.getAccess_token(), authenticationResponse.getInstance_url(),transfere);
 
@@ -121,9 +150,6 @@ public class TransfereService
 
         if(!transfere.getDateExpiration().after(new Date()))
             throw new IllegalStateException("Transfere expiré");
-
-        if(!cin.equalsIgnoreCase(transfere.getReferenceClientBeneficiaire()))
-            throw new IllegalStateException("Cin fourni invalide");
 
         if(transfere.getStatus() == StatusTransfere.PAYE)
             throw new IllegalStateException("Transfere déjà payé");
@@ -146,6 +172,9 @@ public class TransfereService
             {
                 transfere.setStatus(StatusTransfere.BLOQUE);
                 transfereRepository.save(transfere);
+
+                AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
+                salesforceApiConnect.updateTransfere(authenticationResponse.getAccess_token(), authenticationResponse.getInstance_url(),transfere);
             }
             else
                 throw new IllegalStateException("error blocking the transfer");
@@ -155,8 +184,7 @@ public class TransfereService
 
         //update salesforce
 
-        AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
-        salesforceApiConnect.updateTransfere(authenticationResponse.getAccess_token(), authenticationResponse.getInstance_url(),transfere);
+
     }
 
     public void debloquerTransfere(String reference)
@@ -209,6 +237,11 @@ public class TransfereService
     public List<Transfere> getAllTransferesByClient(String cin)
     {
         return transfereRepository.findTransfereByReferenceClientDonneur(cin);
+    }
+
+    public List<Transfere> getAllTransferesByAgent(String agentCin)
+    {
+        return transfereRepository.findTransfereByReferenceAgent(agentCin);
     }
 
 }

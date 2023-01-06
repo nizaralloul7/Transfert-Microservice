@@ -12,4 +12,6 @@ public interface TransfereRepository extends JpaRepository<Transfere,Long>
 {
     Optional<Transfere> findTransfereByReference(String reference);
     List<Transfere> findTransfereByReferenceClientDonneur(String referenceClientDonneur);
+
+    List<Transfere> findTransfereByReferenceAgent(String referenceAgent);
 }

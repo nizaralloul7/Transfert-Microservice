@@ -31,7 +31,6 @@ public class TransfereController
         return transfereRepository.findAll();
     }
 
-
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public void placeTransfere(@RequestBody TransfereRequest transfereRequest)
@@ -53,10 +52,9 @@ public class TransfereController
     }
 
     @PostMapping(path ="/payerTransfere")
-    public TransfereResponse payerTransfere(@RequestParam("reference") String reference, @RequestParam("cin") String cin, @RequestParam("receiverType") String receiverType,
-    @RequestParam("pinTransfere") String pinTransfere)
+    public void payerTransfere(@RequestParam("reference") String reference, @RequestParam("cin") String cin)
     {
-        return transfereService.payerTransfere(reference, cin, receiverType, pinTransfere);
+        transfereService.payerTransfere(reference, cin);
     }
 
     @PostMapping(path ="/bloquer/{reference}")
@@ -81,6 +79,12 @@ public class TransfereController
     public List<Transfere> getAllTransferesByClient(@PathVariable String cinDonneur)
     {
         return transfereService.getAllTransferesByClient(cinDonneur);
+    }
+
+    @PostMapping(path="/payerGab")
+    public TransfereResponse payerTransfereGab(@RequestParam("reference") String reference, @RequestParam("pin") String transferePin)
+    {
+        return transfereService.payerTransfereGab(reference, transferePin);
     }
 
 }
