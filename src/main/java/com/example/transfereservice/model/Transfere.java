@@ -21,7 +21,7 @@ import java.util.Date;
 @NoArgsConstructor
 public class Transfere
 {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @JsonIgnore
     private Long id;
     private String reference;
     private double montant;
@@ -33,4 +33,5 @@ public class Transfere
     private StatusTransfere status;
     @JsonIgnore
     private String codePinTransfere;
+    private String moyenDeTransfert;
 }

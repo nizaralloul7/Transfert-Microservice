@@ -17,5 +17,6 @@ public class TransfereRequest
     private String referenceAgent;
     private String referenceClientDonneur;
     private String referenceClientBeneficiaire;
+    private String modePayement;
 
 }

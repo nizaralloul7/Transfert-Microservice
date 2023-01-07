@@ -9,6 +9,15 @@ import com.example.transfereservice.model.Transfere;
 import com.example.transfereservice.repository.TransfereRepository;
 import com.example.transfereservice.salesforce.AuthenticationResponse;
 import com.example.transfereservice.salesforce.SalesforceApiConnect;
+import com.twilio.Twilio;
+import com.twilio.rest.api.v2010.account.Message;
+import com.vonage.client.VonageClient;
+import com.vonage.client.sms.MessageStatus;
+import com.vonage.client.sms.SmsSubmissionResponse;
+import com.vonage.client.sms.messages.TextMessage;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -23,6 +32,7 @@ public class TransfereService
     private final TransfereRepository transfereRepository;
     private final RestTemplate restTemplate;
     private final SalesforceApiConnect salesforceApiConnect;
+
 
     public TransfereService(TransfereRepository transfereRepository, RestTemplate restTemplate, SalesforceApiConnect salesforceApiConnect)
     {
@@ -47,7 +57,8 @@ public class TransfereService
             throw new IllegalArgumentException("Plafond agent dépassé !");
         }
 
-       /* Client clientDonneur = restTemplate.getForObject("http://client-service/clients/ref/"+transfereRequest.getReferenceClientDonneur(), Client.class);
+       /*
+        Client clientDonneur = restTemplate.getForObject("http://client-service/clients/ref/"+transfereRequest.getReferenceClientDonneur(), Client.class);
         Client clientBeneficiaire = restTemplate.getForObject("http://client-service/clients/ref/"+transfereRequest.getReferenceClientBeneficiaire(), Client.class);
         */
 
@@ -71,12 +82,42 @@ public class TransfereService
                 .dateExpiration(dateExpiration)
                 .status(StatusTransfere.A_SERVIR)
                 .codePinTransfere(pin)
+                .moyenDeTransfert(transfereRequest.getModePayement())
                 .build();
 
         agent.setPlafond(agent.getPlafond() - transfereRequest.getMontant());
-        restTemplate.postForObject("http://agent-service/api/agent/"+agent.getCin(), agent.getPlafond(), null);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Double> request = new HttpEntity<>(agent.getPlafond(), headers);
+        restTemplate.postForObject("http://agent-service/api/agent/"+agent.getCin(), request, Void.class);
 
         //todo : Envoi SMS au client donneur avec la reference de la transaction et le code pin using Twilio ou Vonage API
+
+        VonageClient vonageClient = VonageClient.builder()
+                .apiSecret("V06izjgFYQ2LTK2Q")
+                .apiKey("45604df1")
+                .build();
+
+        String SMSBody = "Cher client, vote réference de transfert est : " + reference  + " d'un montant de "+ transfereRequest.getMontant() +
+                " MAD que vous pouvez récuperer dans l'ensemble des agences SPEED CASH et les GAB SANS CARTE. \nMerci d'avoir utilisé SPEED CASH Service.\n";
+
+        if(transfereRequest.getModePayement().equalsIgnoreCase("gab"))
+        {
+            SMSBody += "Votre PIN du transfert est : " + pin + ".";
+        }
+
+        TextMessage message = new TextMessage("SPEED CASH", "+212632938333", SMSBody);
+        //SmsSubmissionResponse response = vonageClient.getSmsClient().submitMessage(message);
+
+        /*if (response.getMessages().get(0).getStatus() == MessageStatus.OK)
+        {
+            System.out.println("Message sent successfully.");
+        }
+        else
+        {
+            System.out.println("Message failed with error: " + response.getMessages().get(0).getErrorText());
+        }
+         */
 
         transfereRepository.save(transfere);
         AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
@@ -173,6 +214,7 @@ public class TransfereService
                 transfere.setStatus(StatusTransfere.BLOQUE);
                 transfereRepository.save(transfere);
 
+                //update salesforce
                 AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
                 salesforceApiConnect.updateTransfere(authenticationResponse.getAccess_token(), authenticationResponse.getInstance_url(),transfere);
             }
@@ -181,8 +223,6 @@ public class TransfereService
         }
         else
             throw new IllegalStateException("error, transfere introuvable");
-
-        //update salesforce
 
 
     }
@@ -196,7 +236,7 @@ public class TransfereService
             if(transfere.getStatus() == StatusTransfere.BLOQUE)
             {
                 transfere.setStatus(StatusTransfere.DEBLOQUE_A_SERVIR);
-
+                transfereRepository.save(transfere);
                 //update salesforce
                 AuthenticationResponse authenticationResponse = salesforceApiConnect.login();
                 salesforceApiConnect.updateTransfere(authenticationResponse.getAccess_token(), authenticationResponse.getInstance_url(),transfere);
@@ -207,7 +247,6 @@ public class TransfereService
         else
             throw new IllegalStateException("error, transfere introuvable");
     }
-
 
     public void extournerTransfere(String reference, String motif)
     {
@@ -227,7 +266,7 @@ public class TransfereService
         transfere.setStatus(StatusTransfere.EXTOURNE);
         agent.setPlafond(agent.getPlafond() + transfere.getMontant());
 
-        restTemplate.postForObject("http://agent-service/api/agent/"+agent.getCin(), agent.getPlafond(), null);
+        restTemplate.postForObject("http://agent-service/api/agent/"+agent.getCin(), agent.getPlafond(), Void.class);
 
         //update salesforce
         AuthenticationResponse authenticationResponse = salesforceApiConnect.login();

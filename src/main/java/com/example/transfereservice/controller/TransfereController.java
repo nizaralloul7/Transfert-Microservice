@@ -87,4 +87,9 @@ public class TransfereController
         return transfereService.payerTransfereGab(reference, transferePin);
     }
 
+    @GetMapping(path = "/get-by-agent/{refAgent}")
+    public List<Transfere> getAllTransferesByAgent(@PathVariable String cin)
+    {
+        return transfereService.getAllTransferesByAgent(cin);
+    }
 }
